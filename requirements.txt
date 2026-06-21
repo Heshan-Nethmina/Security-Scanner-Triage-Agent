@@ -1,0 +1,10 @@
+# Dependencies are added phase by phase, only when a phase actually needs one.
+# This keeps the environment minimal and makes it obvious which phase
+# introduced each package, and why.
+#
+# Phase 1 (setup) needs no third-party packages yet.
+#
+# Coming up:
+#   Phase 2  ingest / normalize  ->  pydantic (data models) + pytest (tests)
+#   Phase 3  LLM client          ->  provider SDK + python-dotenv
+#   ...      (added as we reach each phase)
