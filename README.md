@@ -55,3 +55,11 @@ A short note per phase, describing what it added.
   **Groq** (free tier, default model `llama-3.3-70b-versatile`), configured via
   `.env` (`python-dotenv`); Anthropic is a documented drop-in. Verified with one
   real API call.
+- **Phase 4 — First triage (no agent yet).** Added a structured-output helper
+  (`complete_structured()` — JSON mode + Pydantic validation + retry) and a
+  `TriageResult` schema ([`app/schemas/triage.py`](app/schemas/triage.py)). The
+  single-shot triage step ([`app/agent/triage.py`](app/agent/triage.py)) turns a
+  `Finding` into a recommended priority, false-positive flag, confidence, reasoning,
+  and remediation — one LLM call, no loop. On the sample it re-prioritized an
+  exposed `.env` from high→critical and flagged version disclosure as a false
+  positive. Faked-LLM tests in [`tests/test_triage.py`](tests/test_triage.py).
