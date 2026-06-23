@@ -1,0 +1,5 @@
+{"rule_id": "CVE-2021-44228", "expected_priority": "critical", "expected_false_positive": false}
+{"rule_id": "exposed-env-file", "expected_priority": "high", "expected_false_positive": false}
+{"rule_id": "cors-misconfig", "expected_priority": "medium", "expected_false_positive": false}
+{"rule_id": "http-missing-security-headers", "expected_priority": "low", "expected_false_positive": false}
+{"rule_id": "nginx-version-detect", "expected_priority": "info", "expected_false_positive": true}

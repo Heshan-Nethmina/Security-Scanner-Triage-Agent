@@ -43,6 +43,24 @@ python -m app.rag.knowledge_base
 streamlit run dashboard/app.py
 ```
 
+## Evaluation
+
+A small labeled answer key ([`eval/labels.jsonl`](eval/labels.jsonl)) lets us measure
+triage quality instead of eyeballing it. Run `python -m eval.evaluate`. On the bundled
+sample (5 clusters), a representative run:
+
+| Metric | Score |
+|---|---|
+| Priority exact-match accuracy | 60% (3/5) |
+| Priority within one level | 100% |
+| False-positive precision | n/a (no FP predicted this run) |
+| False-positive recall | 0% (1 labeled FP, missed this run) |
+
+These numbers are **illustrative**: the labeled set is tiny and the model runs at a
+non-zero temperature, so results vary run to run. The harness is the point — it turns
+"seems right" into a number and surfaces genuine judgment gaps (e.g. whether version
+disclosure counts as a false positive).
+
 ## Build log
 
 A short note per phase, describing what it added.
@@ -98,3 +116,8 @@ A short note per phase, describing what it added.
   pipeline (ingest → dedupe → triage each cluster → sort) into a `Report`, with a
   Markdown renderer. Plus a Streamlit dashboard ([`dashboard/app.py`](dashboard/app.py))
   — `streamlit run dashboard/app.py`. Report assembly tested offline; suite at 13.
+- **Phase 9 — Evaluation harness.** Added a labeled answer key
+  ([`eval/labels.jsonl`](eval/labels.jsonl)) and a metrics harness
+  ([`eval/evaluate.py`](eval/evaluate.py)) measuring priority accuracy and
+  false-positive precision/recall against it (run `python -m eval.evaluate`; see
+  **Evaluation** above). The metric math is unit-tested; suite at 16.
