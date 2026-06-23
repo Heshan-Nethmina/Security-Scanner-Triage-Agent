@@ -26,8 +26,11 @@ py -m venv .venv
 # 2. Activate it (PowerShell)
 .\.venv\Scripts\Activate.ps1
 
-# 3. Install dependencies (none yet in Phase 1 — this list grows each phase)
+# 3. Install dependencies
 pip install -r requirements.txt
+
+# 4. Configure the LLM provider: copy the template, then add your API key
+Copy-Item .env.example .env   # then edit .env and set GROQ_API_KEY
 ```
 
 ## Build log
@@ -46,3 +49,9 @@ A short note per phase, describing what it added.
   ([`app/ingest/nuclei.py`](app/ingest/nuclei.py)) mapping raw JSONL records onto
   `Finding`, covered by a 6-test suite ([`tests/test_ingest.py`](tests/test_ingest.py)).
   Run the tests with `pytest`.
+- **Phase 3 — LLM client.** Added a provider-agnostic LLM client
+  ([`app/llm/`](app/llm/)) with a single `complete()` method, a typed `LLMResult`,
+  per-call token/latency/cost logging, and a pricing table. The active provider is
+  **Groq** (free tier, default model `llama-3.3-70b-versatile`), configured via
+  `.env` (`python-dotenv`); Anthropic is a documented drop-in. Verified with one
+  real API call.

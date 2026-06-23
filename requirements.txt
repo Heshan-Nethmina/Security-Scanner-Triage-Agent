@@ -13,5 +13,6 @@
 pydantic==2.13.4   # typed, self-validating data models
 pytest==9.1.1      # test runner (a dev/test tool, not needed at runtime)
 
-# Coming up:
-#   Phase 3  LLM client  ->  provider SDK + python-dotenv
+# --- Phase 3: LLM client ---
+groq==1.5.0           # Groq API SDK (OpenAI-style chat completions)
+python-dotenv==1.2.2  # load configuration + secrets from a .env file
