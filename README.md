@@ -49,12 +49,34 @@ Copy-Item .env.example .env   # then edit .env and set GROQ_API_KEY
 
 ## Usage
 
+After **Setup**, run everything from the project root with the venv activated
+(`.\.venv\Scripts\Activate.ps1`).
+
 ```powershell
-# Build the RAG knowledge base (once)
+# Build the RAG knowledge base (once; rebuild after editing data/kb/knowledge_base.jsonl)
 python -m app.rag.knowledge_base
 
-# Launch the dashboard (opens in your browser)
+# Launch the dashboard, then open http://localhost:8501 and click "Run triage"
 streamlit run dashboard/app.py
+
+# Run the evaluation harness (prints accuracy / precision / recall)
+python -m eval.evaluate
+
+# Run the tests (fast, fully offline -- no API calls)
+pytest
+```
+
+Generate a Markdown report (`triage_report.md`) from the command line instead of the dashboard:
+
+```powershell
+python -c "import sys; sys.stdout.reconfigure(encoding='utf-8'); from pathlib import Path; from app.ingest import parse_nuclei_file; from app.llm import LLMClient, LLMConfig; from app.report import build_report, render_markdown; r = build_report(parse_nuclei_file('data/nuclei_sample.jsonl'), LLMClient(LLMConfig.from_env())); Path('triage_report.md').write_text(render_markdown(r), encoding='utf-8'); print('wrote triage_report.md')"
+```
+
+### Docker (optional)
+
+```powershell
+docker build -t triage-agent .
+docker run --rm -e GROQ_API_KEY=your-gsk-key -p 8501:8501 triage-agent   # open http://localhost:8501
 ```
 
 ## Evaluation
@@ -74,6 +96,16 @@ These numbers are **illustrative**: the labeled set is tiny and the model runs a
 non-zero temperature, so results vary run to run. The harness is the point — it turns
 "seems right" into a number and surfaces genuine judgment gaps (e.g. whether version
 disclosure counts as a false positive).
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `RuntimeError: Missing API key: set GROQ_API_KEY` | `.env` is missing or still has the placeholder — set your real key and re-run. |
+| `Activate.ps1 cannot be loaded` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then activate again. |
+| `ModuleNotFoundError: app` | Run from the project root with the venv activated. |
+| Dashboard shows no results | Click **Run triage** — it doesn't auto-run (it makes live calls). |
+| Rate-limited by Groq | Free-tier limit; wait a minute or set `LLM_MODEL=llama-3.1-8b-instant` in `.env`. |
 
 ## Build log
 
