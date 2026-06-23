@@ -40,3 +40,9 @@ A short note per phase, describing what it added.
   [`data/nuclei_sample.jsonl`](data/nuclei_sample.jsonl) — note the **JSONL**
   format (one finding per line). Documented the finding schema and the
   JSON-vs-JSONL distinction.
+- **Phase 2 — Ingest + normalize.** Added the `pydantic` + `pytest` dependencies
+  and the normalized, scanner-agnostic [`Finding`](app/schemas/finding.py) model
+  (typed, validated, with a `Severity` enum). Wrote the Nuclei parser
+  ([`app/ingest/nuclei.py`](app/ingest/nuclei.py)) mapping raw JSONL records onto
+  `Finding`, covered by a 6-test suite ([`tests/test_ingest.py`](tests/test_ingest.py)).
+  Run the tests with `pytest`.

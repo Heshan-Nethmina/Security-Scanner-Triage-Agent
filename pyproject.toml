@@ -1,0 +1,8 @@
+# Minimal project config. For now it only configures pytest:
+#   - pythonpath = ["."]   puts the project root on sys.path so tests can
+#     `import app` without installing the package.
+#   - testpaths = ["tests"]  tells pytest where the tests live.
+# (Alternatives: a pytest.ini file, a tests/conftest.py, or `pip install -e .`.)
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

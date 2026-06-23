@@ -2,9 +2,16 @@
 # This keeps the environment minimal and makes it obvious which phase
 # introduced each package, and why.
 #
-# Phase 1 (setup) needs no third-party packages yet.
+# We pin the exact versions of the packages we use DIRECTLY (below). pip resolves
+# their transitive dependencies automatically; run `pip freeze` to see the full
+# tree. (For lockfile-level reproducibility you'd freeze everything or use a tool
+# like pip-tools / uv -- overkill for a learning project.)
 #
+# Phase 1 (setup): no third-party packages needed.
+
+# --- Phase 2: ingest / normalize ---
+pydantic==2.13.4   # typed, self-validating data models
+pytest==9.1.1      # test runner (a dev/test tool, not needed at runtime)
+
 # Coming up:
-#   Phase 2  ingest / normalize  ->  pydantic (data models) + pytest (tests)
-#   Phase 3  LLM client          ->  provider SDK + python-dotenv
-#   ...      (added as we reach each phase)
+#   Phase 3  LLM client  ->  provider SDK + python-dotenv
