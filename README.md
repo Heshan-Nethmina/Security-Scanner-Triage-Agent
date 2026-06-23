@@ -77,3 +77,9 @@ A short note per phase, describing what it added.
   semantic retrieval — and the agent loop didn't change. Search matches by meaning
   (e.g. finds Heartbleed from "leaking memory and private keys"). The store
   (`chroma_db/`) is gitignored; build it with `python -m app.rag.knowledge_base`.
+- **Phase 7 — Dedupe + clustering.** Added `dedupe_findings`
+  ([`app/dedupe/dedupe.py`](app/dedupe/dedupe.py)) and a `FindingCluster` model
+  ([`app/schemas/cluster.py`](app/schemas/cluster.py)) that collapse findings sharing
+  a `rule_id` into one cluster (key is configurable), so triage runs once per cluster
+  instead of once per finding. On the sample: 6 findings → 5 clusters (the
+  missing-headers pair merged). Tests in [`tests/test_dedupe.py`](tests/test_dedupe.py).
