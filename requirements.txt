@@ -19,3 +19,6 @@ python-dotenv==1.2.2  # load configuration + secrets from a .env file
 
 # --- Phase 6: RAG knowledge base ---
 chromadb==1.5.9       # local vector DB + built-in offline embedder (all-MiniLM-L6-v2)
+
+# --- Phase 8: dashboard ---
+streamlit==1.58.0     # interactive web dashboard

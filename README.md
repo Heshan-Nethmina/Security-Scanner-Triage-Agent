@@ -33,6 +33,16 @@ pip install -r requirements.txt
 Copy-Item .env.example .env   # then edit .env and set GROQ_API_KEY
 ```
 
+## Usage
+
+```powershell
+# Build the RAG knowledge base (once)
+python -m app.rag.knowledge_base
+
+# Launch the dashboard (opens in your browser)
+streamlit run dashboard/app.py
+```
+
 ## Build log
 
 A short note per phase, describing what it added.
@@ -83,3 +93,8 @@ A short note per phase, describing what it added.
   a `rule_id` into one cluster (key is configurable), so triage runs once per cluster
   instead of once per finding. On the sample: 6 findings → 5 clusters (the
   missing-headers pair merged). Tests in [`tests/test_dedupe.py`](tests/test_dedupe.py).
+- **Phase 8 — Report + dashboard.** Added the report assembler
+  ([`app/report/report.py`](app/report/report.py)): `build_report` runs the full
+  pipeline (ingest → dedupe → triage each cluster → sort) into a `Report`, with a
+  Markdown renderer. Plus a Streamlit dashboard ([`dashboard/app.py`](dashboard/app.py))
+  — `streamlit run dashboard/app.py`. Report assembly tested offline; suite at 13.
