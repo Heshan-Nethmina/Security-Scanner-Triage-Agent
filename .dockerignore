@@ -1,0 +1,11 @@
+# Keep the build context (and the image) small and free of secrets.
+.git/
+.venv/
+.env
+chroma_db/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+triage_report.md

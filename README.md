@@ -12,6 +12,20 @@ This repo is built **in small phases as a learning project** — see
 [`LEARNING_GUIDE.md`](LEARNING_GUIDE.md) for the architecture and concepts, and
 [`CLAUDE.md`](CLAUDE.md) for how the build is structured.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Nuclei JSONL"] --> B["Ingest / normalize<br/>(Finding)"]
+    B --> C["Dedupe<br/>(FindingCluster)"]
+    C --> D["Triage agent<br/>reason -> act -> observe"]
+    D -->|"lookup_cve"| E[("RAG store<br/>Chroma: CVE/CWE")]
+    E --> D
+    D --> F["Report +<br/>Streamlit dashboard"]
+    D -.->|"usage"| G["Observability<br/>tokens / cost / latency"]
+    F -.->|"scored by"| H["Eval harness<br/>precision / recall"]
+```
+
 ## Prerequisites
 
 - Python 3.11+ (developed on 3.13)
@@ -121,3 +135,8 @@ A short note per phase, describing what it added.
   ([`eval/evaluate.py`](eval/evaluate.py)) measuring priority accuracy and
   false-positive precision/recall against it (run `python -m eval.evaluate`; see
   **Evaluation** above). The metric math is unit-tested; suite at 16.
+- **Phase 10 — Polish.** Added an observability accumulator (`UsageStats` on the LLM
+  client) totalling tokens/cost/latency across a run, surfaced in the dashboard; an
+  architecture diagram (above); and Docker packaging (`Dockerfile` + `.dockerignore`).
+  Build/run: `docker build -t triage-agent .` then
+  `docker run --rm -e GROQ_API_KEY=... -p 8501:8501 triage-agent`. Suite at 17.

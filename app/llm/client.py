@@ -72,12 +72,31 @@ class ChatTurn:
     usage: LLMResult
 
 
+@dataclass
+class UsageStats:
+    """Running totals across all calls made by one client (observability)."""
+
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0     # sums known per-call costs; unknown prices count as 0
+    latency_s: float = 0.0
+
+    def add(self, result: "LLMResult") -> None:
+        self.calls += 1
+        self.input_tokens += result.input_tokens
+        self.output_tokens += result.output_tokens
+        self.cost_usd += result.cost_usd or 0.0
+        self.latency_s += result.latency_s
+
+
 class LLMClient:
     """A thin, provider-agnostic wrapper over a chat-completions API."""
 
     def __init__(self, config: LLMConfig) -> None:
         self.config = config
         self._client = self._build_client(config)
+        self.usage = UsageStats()  # accumulates across every call this client makes
 
     @staticmethod
     def _build_client(config: LLMConfig):
@@ -278,6 +297,7 @@ class LLMClient:
                 usage.prompt_tokens, usage.completion_tokens,
             ),
         )
+        self.usage.add(result)
         self._log(result)
         return result
 

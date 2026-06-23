@@ -51,6 +51,7 @@ if st.button("Run triage", type="primary"):
         st.stop()
     with st.spinner("Triaging (dedupe + agent + RAG lookups)…"):
         st.session_state["report"] = build_report(findings, client)
+        st.session_state["usage"] = client.usage
 
 report = st.session_state.get("report")
 if report:
@@ -60,6 +61,14 @@ if report:
     col2.metric("Clusters", s.total_clusters)
     col3.metric("Likely false positives", s.likely_false_positives)
     st.write("**By priority:** " + ", ".join(f"{k}: {v}" for k, v in s.by_priority.items()))
+
+    usage = st.session_state.get("usage")
+    if usage:
+        st.caption(
+            f"Observability — {usage.calls} LLM calls · "
+            f"{usage.input_tokens}+{usage.output_tokens} tokens · "
+            f"est. ${usage.cost_usd:.6f} · {usage.latency_s:.1f}s total"
+        )
 
     st.divider()
     for item in report.items:
