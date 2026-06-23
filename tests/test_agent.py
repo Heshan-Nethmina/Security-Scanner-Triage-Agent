@@ -7,10 +7,22 @@ requested tool, feeds the result back, terminates, and returns a TriageResult.
 """
 
 from app.agent import run_triage_agent
+from app.agent.tools import Tool
 from app.llm.client import ChatTurn, LLMResult, ToolCall
 from app.schemas import Finding, Priority, TriageResult
 
 _DUMMY_USAGE = LLMResult("", "fake", "fake", 0, 0, 0.0, 0.0)
+
+
+def _fake_tools() -> dict[str, Tool]:
+    """A stub tool registry so the loop test never touches the real RAG store."""
+    tool = Tool(
+        name="lookup_cve",
+        description="stub",
+        parameters={"type": "object", "properties": {"cve_id": {"type": "string"}}},
+        func=lambda cve_id: f"[fake] reference for {cve_id}",
+    )
+    return {tool.name: tool}
 
 
 class _FakeAgentClient:
@@ -65,7 +77,7 @@ def test_agent_runs_tool_then_returns_structured_result():
     )
     fake = _FakeAgentClient([turn1, turn2], canned)
 
-    result = run_triage_agent(_finding(), fake)  # type: ignore[arg-type]
+    result = run_triage_agent(_finding(), fake, tools=_fake_tools())  # type: ignore[arg-type]
 
     assert result is canned              # returns the validated TriageResult
     assert fake.chat_calls == 2          # looped: tool turn, then final turn

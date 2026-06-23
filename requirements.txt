@@ -16,3 +16,6 @@ pytest==9.1.1      # test runner (a dev/test tool, not needed at runtime)
 # --- Phase 3: LLM client ---
 groq==1.5.0           # Groq API SDK (OpenAI-style chat completions)
 python-dotenv==1.2.2  # load configuration + secrets from a .env file
+
+# --- Phase 6: RAG knowledge base ---
+chromadb==1.5.9       # local vector DB + built-in offline embedder (all-MiniLM-L6-v2)

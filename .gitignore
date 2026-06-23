@@ -33,3 +33,4 @@ Thumbs.db
 # NOTE: sample scanner outputs in data/ ARE committed (they're part of the repo).
 # Generated stores (e.g. the Chroma vector DB) are NOT — we'll add specific
 # ignores for those in the RAG phase.
+chroma_db/

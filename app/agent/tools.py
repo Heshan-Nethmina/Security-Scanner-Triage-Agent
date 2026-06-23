@@ -1,10 +1,10 @@
 """Tools the triage agent can call, and a tiny abstraction describing them.
 
-A "tool" here is a plain Python function plus a JSON-Schema description of its
-arguments. The description is what we advertise to the model; the function is what
-*we* run when the model asks for it. In Phase 5 these are stubs (canned data) so we
-can learn the agent loop; Phase 6 swaps their insides for real CVE/CWE lookups via
-RAG -- without changing the agent loop or the tool's signature.
+A "tool" is a plain Python function plus a JSON-Schema description of its arguments.
+The description is what we advertise to the model; the function is what *we* run when
+the model asks for it. ``lookup_cve`` now retrieves real reference data from the RAG
+knowledge base (Chroma) -- the agent loop and the tool's schema are unchanged from
+when it was a stub, which is exactly the point of the seam.
 """
 
 from collections.abc import Callable
@@ -32,27 +32,54 @@ class Tool:
         }
 
 
+# Open the knowledge-base collection lazily and cache it, so importing this module
+# doesn't require a built KB and we don't reopen the store on every tool call.
+_collection = None
+
+
+def _kb_collection():
+    global _collection
+    if _collection is None:
+        from app.rag import get_collection
+
+        _collection = get_collection()
+    return _collection
+
+
 def lookup_cve(cve_id: str) -> str:
-    """STUB: return canned reference text for a CVE id.
+    """Retrieve reference details for a CVE (or CWE) id from the knowledge base.
 
-    Phase 6 replaces the body with real retrieval over NVD/CWE data; the signature
-    and return type stay identical, so the agent loop never has to change.
+    Returns the exact entry for ``cve_id`` if present, plus the most semantically
+    related entries (e.g. the relevant CWE), giving the agent real data to ground its
+    judgment. Reads from the RAG store; the model never sees the retrieval machinery.
     """
-    canned = {
-        "CVE-2021-44228": (
-            "CVE-2021-44228 (Log4Shell): Apache Log4j2 JNDI lookup leading to remote "
-            "code execution. CVSS 10.0 (critical). Affects Log4j2 2.0-beta9 through "
-            "2.15.0. Fixed in 2.17.1 -- note 2.15.0 and 2.16.0 had follow-up issues. "
-            "Weakness: CWE-502 (deserialization of untrusted data). Widely exploited."
-        ),
-    }
-    return canned.get(
-        cve_id,
-        f"No reference data found for {cve_id} (the stub only knows a few CVEs so far).",
-    )
+    try:
+        col = _kb_collection()
+    except Exception as exc:  # e.g. the KB hasn't been built yet
+        return f"Knowledge base unavailable ({exc}). Build it with build_knowledge_base()."
+
+    exact = col.get(ids=[cve_id], include=["documents"])
+    sections: list[str] = []
+    if exact["ids"]:
+        sections.append(f"{cve_id}: {exact['documents'][0]}")
+        query_text = exact["documents"][0]
+    else:
+        sections.append(f"No exact entry for {cve_id} in the knowledge base.")
+        query_text = cve_id
+
+    # Semantic search for related references (relevant CWEs, similar CVEs).
+    related = col.query(query_texts=[query_text], n_results=3, include=["documents"])
+    related_lines = [
+        f"- {rid}: {related['documents'][0][i]}"
+        for i, rid in enumerate(related["ids"][0])
+        if rid != cve_id
+    ][:2]
+    if related_lines:
+        sections.append("Related references:\n" + "\n".join(related_lines))
+
+    return "\n\n".join(sections)
 
 
-# The stub tool the agent will be offered.
 LOOKUP_CVE_TOOL = Tool(
     name="lookup_cve",
     description=(
@@ -73,5 +100,5 @@ LOOKUP_CVE_TOOL = Tool(
     func=lookup_cve,
 )
 
-# Name -> Tool registry the loop will dispatch through.
+# Name -> Tool registry the loop dispatches through.
 TOOLS: dict[str, Tool] = {LOOKUP_CVE_TOOL.name: LOOKUP_CVE_TOOL}

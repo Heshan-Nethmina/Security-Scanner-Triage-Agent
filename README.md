@@ -70,3 +70,10 @@ A short note per phase, describing what it added.
   `TriageResult`. Added a tool-enabled `chat()` to the LLM client. A stub `lookup_cve`
   already shows the value — the agent corrects the model's memory (Log4j fixed in
   2.17.1, not 2.15.1). Mocked loop test in [`tests/test_agent.py`](tests/test_agent.py).
+- **Phase 6 — RAG knowledge base.** Built a local Chroma vector store
+  ([`app/rag/knowledge_base.py`](app/rag/knowledge_base.py)) over a curated CVE/CWE
+  corpus ([`data/kb/knowledge_base.jsonl`](data/kb/knowledge_base.jsonl)), embedded
+  with Chroma's offline `all-MiniLM-L6-v2`. Replaced the stub `lookup_cve` with real
+  semantic retrieval — and the agent loop didn't change. Search matches by meaning
+  (e.g. finds Heartbleed from "leaking memory and private keys"). The store
+  (`chroma_db/`) is gitignored; build it with `python -m app.rag.knowledge_base`.
