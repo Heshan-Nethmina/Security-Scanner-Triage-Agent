@@ -63,3 +63,10 @@ A short note per phase, describing what it added.
   and remediation — one LLM call, no loop. On the sample it re-prioritized an
   exposed `.env` from high→critical and flagged version disclosure as a false
   positive. Faked-LLM tests in [`tests/test_triage.py`](tests/test_triage.py).
+- **Phase 5 — The agent loop.** Hand-wrote a reason→act→observe agent
+  ([`app/agent/loop.py`](app/agent/loop.py)) that offers the model tools
+  ([`app/agent/tools.py`](app/agent/tools.py)), runs the ones it requests, feeds the
+  results back, and loops (with an iteration cap) until it produces a validated
+  `TriageResult`. Added a tool-enabled `chat()` to the LLM client. A stub `lookup_cve`
+  already shows the value — the agent corrects the model's memory (Log4j fixed in
+  2.17.1, not 2.15.1). Mocked loop test in [`tests/test_agent.py`](tests/test_agent.py).

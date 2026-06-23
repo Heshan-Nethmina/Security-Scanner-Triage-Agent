@@ -1,12 +1,13 @@
-"""Provider-agnostic LLM client with a single ``complete()`` method.
+"""Provider-agnostic LLM client.
 
-The rest of the app calls ``complete(...)`` without knowing which provider
-answers. Today that is Groq (OpenAI-style chat completions); an Anthropic branch
-slots in later by following the same shape. Every call logs token usage, latency,
+- ``complete()``           -- one prompt -> text (+ usage/cost logging)
+- ``complete_structured()`` -- one prompt -> validated Pydantic object (validate + retry)
+- ``chat()``              -- one tool-enabled turn over a message list; the building
+                            block for the agent loop (returns text and/or tool calls)
+
+Today the provider is Groq (OpenAI-style chat completions); an Anthropic branch
+slots in by following the same shape. Every model call logs token usage, latency,
 and estimated cost.
-
-``complete_structured()`` builds on ``complete()`` to return a *validated* Pydantic
-object, retrying on invalid output -- the reliable-JSON path the triage step needs.
 """
 
 import json
@@ -45,6 +46,30 @@ class LLMResult:
     output_tokens: int
     latency_s: float
     cost_usd: float | None  # None when the model has no entry in the price table
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """A normalized request from the model to run one tool."""
+
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass(frozen=True)
+class ChatTurn:
+    """The outcome of one tool-enabled turn.
+
+    If ``tool_calls`` is non-empty, the model wants those tools run before it will
+    answer. ``assistant_message`` is the assistant turn to append verbatim to the
+    running transcript so the next request stays coherent.
+    """
+
+    text: str | None
+    tool_calls: list[ToolCall]
+    assistant_message: dict
+    usage: LLMResult
 
 
 class LLMClient:
@@ -137,6 +162,25 @@ class LLMClient:
             f"Last error: {last_error}"
         )
 
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        temperature: float = DEFAULT_TEMPERATURE,
+    ) -> ChatTurn:
+        """Run one turn over a message list, optionally offering ``tools``.
+
+        Returns a ``ChatTurn``: the model's text and/or its tool-call requests, plus
+        the assistant message to append to the transcript. This is what the agent
+        loop calls repeatedly.
+        """
+        if self.config.provider == "groq":
+            return self._chat_groq(messages, tools, max_tokens, temperature)
+        raise NotImplementedError(self.config.provider)
+
+    # --- Groq-specific implementations -------------------------------------------
+
     def _complete_groq(
         self,
         prompt: str,
@@ -145,7 +189,7 @@ class LLMClient:
         temperature: float,
         json_mode: bool,
     ) -> LLMResult:
-        messages: list[dict[str, str]] = []
+        messages: list[dict] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
@@ -162,23 +206,77 @@ class LLMClient:
             **extra,
         )
         latency_s = time.perf_counter() - start
-
         text = response.choices[0].message.content or ""
-        usage = response.usage
-        input_tokens = usage.prompt_tokens
-        output_tokens = usage.completion_tokens
-        cost_usd = estimate_cost(
-            self.config.provider, self.config.model, input_tokens, output_tokens
+        return self._make_result(text, response.usage, latency_s)
+
+    def _chat_groq(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None,
+        max_tokens: int,
+        temperature: float,
+    ) -> ChatTurn:
+        extra: dict = {}
+        if tools:
+            extra["tools"] = tools
+            extra["tool_choice"] = "auto"  # let the model decide whether to call one
+
+        start = time.perf_counter()
+        response = self._client.chat.completions.create(
+            model=self.config.model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            **extra,
+        )
+        latency_s = time.perf_counter() - start
+        msg = response.choices[0].message
+        usage = self._make_result(msg.content or "", response.usage, latency_s)
+
+        tool_calls = [
+            ToolCall(
+                id=tc.id,
+                name=tc.function.name,
+                arguments=json.loads(tc.function.arguments or "{}"),
+            )
+            for tc in (msg.tool_calls or [])
+        ]
+
+        # Rebuild the assistant turn explicitly so we control exactly what we echo
+        # back (OpenAI/Groq accept this shape; content may be null with tool calls).
+        assistant_message: dict = {"role": "assistant", "content": msg.content}
+        if msg.tool_calls:
+            assistant_message["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in msg.tool_calls
+            ]
+
+        return ChatTurn(
+            text=msg.content,
+            tool_calls=tool_calls,
+            assistant_message=assistant_message,
+            usage=usage,
         )
 
+    # --- shared helpers ----------------------------------------------------------
+
+    def _make_result(self, text: str, usage, latency_s: float) -> LLMResult:
+        """Build an LLMResult from a provider usage object and log it."""
         result = LLMResult(
             text=text,
             provider=self.config.provider,
             model=self.config.model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
+            input_tokens=usage.prompt_tokens,
+            output_tokens=usage.completion_tokens,
             latency_s=latency_s,
-            cost_usd=cost_usd,
+            cost_usd=estimate_cost(
+                self.config.provider, self.config.model,
+                usage.prompt_tokens, usage.completion_tokens,
+            ),
         )
         self._log(result)
         return result
