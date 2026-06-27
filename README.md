@@ -12,6 +12,30 @@ This repo is built **in small phases as a learning project** — see
 [`LEARNING_GUIDE.md`](LEARNING_GUIDE.md) for the architecture and concepts, and
 [`CLAUDE.md`](CLAUDE.md) for how the build is structured.
 
+## What makes this different
+
+Most scanner output is a flat, noisy list with generic severity labels and no fix
+guidance. This project turns that into a **prioritized, deduplicated, remediated**
+report — and a few things set it apart:
+
+- **It re-prioritizes, not just relabels.** The agent assigns its *own* action
+  priority and can disagree with the scanner — e.g. it escalates an exposed `.env`
+  from the scanner's `high` to `critical`, with a stated reason.
+- **It's grounded in real data (RAG), not the model's memory.** Before judging a CVE
+  it retrieves authoritative CVE/CWE reference text from a local vector store — so it
+  gives the *correct* Log4Shell fix (`2.17.1`), where the model alone said `2.15.1`.
+- **It filters false positives** and **deduplicates** near-identical findings, so you
+  triage each real issue once instead of many times.
+- **It's measured, not vibes.** An evaluation harness scores priority accuracy and
+  false-positive precision/recall against a labeled answer key.
+- **It's observable and cost-aware.** Every model call logs tokens, latency, and
+  estimated cost; per-run totals show up in the dashboard.
+- **It's provider-agnostic and free to run.** Groq's free tier plus a local, offline
+  embedding model — no paid API required — with Anthropic Claude a one-line swap away.
+- **The agent loop is hand-written** (no LangChain/LangGraph), so the
+  reason → act → observe mechanics are fully visible.
+- **Safety-first by design:** it explains *how to fix*, never how to attack.
+
 ## Architecture
 
 ```mermaid
@@ -25,6 +49,117 @@ flowchart LR
     D -.->|"usage"| G["Observability<br/>tokens / cost / latency"]
     F -.->|"scored by"| H["Eval harness<br/>precision / recall"]
 ```
+
+### How it works (pipeline walkthrough)
+
+1. **Ingest & normalize** — `parse_nuclei_file` reads the Nuclei **JSONL** (one finding
+   per line) and maps each record onto a validated, scanner-agnostic `Finding`
+   (Pydantic). Quirks like kebab-case keys and a missing `classification` block are
+   handled here, not downstream.
+2. **Dedupe** — `dedupe_findings` groups findings that share a `rule_id` into a
+   `FindingCluster`, so the same issue at many URLs is triaged once (key is configurable).
+3. **Triage (the agent)** — for each cluster, `run_triage_agent` runs a
+   reason → act → observe loop: the model may call the `lookup_cve` tool, which
+   retrieves real CVE/CWE context from the Chroma store; when it has enough, the
+   free-text assessment is converted to a validated `TriageResult` (priority,
+   false-positive flag, confidence, reasoning, remediation) via `complete_structured`.
+4. **Assemble** — `build_report` sorts the triaged clusters by priority and computes a
+   summary into a `Report` (rendered to Markdown or shown in the dashboard).
+5. **Cross-cutting** — every LLM call logs and accumulates token/cost/latency
+   (`UsageStats`); the eval harness scores the output against labels.
+
+### The agent loop
+
+```mermaid
+flowchart TD
+    S(["one Finding"]) --> R["LLM reasons<br/>(tools offered)"]
+    R --> Q{"wants a tool?"}
+    Q -- yes --> T["run lookup_cve<br/>retrieve from Chroma"]
+    T --> O["feed result back"]
+    O --> R
+    Q -- no --> A["free-text assessment"]
+    A --> V["complete_structured<br/>validate + retry"]
+    V --> D(["validated TriageResult"])
+```
+
+### How RAG works
+
+```mermaid
+flowchart LR
+    subgraph "Indexing (once)"
+      C["CVE/CWE corpus<br/>(JSONL)"] --> E1["embed<br/>all-MiniLM-L6-v2"] --> DB[("Chroma store")]
+    end
+    subgraph "Querying (per finding)"
+      Q["lookup_cve(cve_id)"] --> E2["embed query"] --> DB
+      DB --> KB["nearest entries"] --> AG["agent grounds<br/>its judgment"]
+    end
+```
+
+## Tech stack
+
+| Area | Choice | Why this one |
+|---|---|---|
+| Language | **Python 3.11+** (developed on 3.13) | ubiquitous for LLM/ML tooling |
+| Data models | **Pydantic v2** | typed, self-validating models at every module boundary |
+| LLM access | **Groq** SDK (default `llama-3.3-70b-versatile`) | free tier, OpenAI-style API; wrapped provider-agnostically (Anthropic is a drop-in) |
+| Config & secrets | **python-dotenv** + gitignored `.env` | secrets in the environment, never in code |
+| RAG store | **Chroma** (`chromadb`) | simple local vector DB that persists to disk |
+| Embeddings | **all-MiniLM-L6-v2** (Chroma's built-in ONNX model) | runs locally/offline — no API key, no cost |
+| Agent | **hand-written loop** (no framework) | keeps the reason → act → observe mechanics visible |
+| Dashboard | **Streamlit** | minimal code to a clickable web UI |
+| Tests | **pytest** | 17 tests, all offline (LLM + Chroma faked) |
+| Packaging | **Docker** | one image runs the dashboard |
+
+## Project structure
+
+```
+app/
+  ingest/     # parse + normalize scanner JSON -> Finding
+    nuclei.py
+  schemas/    # Pydantic data models (the contracts between modules)
+    finding.py  triage.py  cluster.py  report.py
+  llm/        # provider-agnostic client: complete(), complete_structured(), chat()
+    config.py  client.py  pricing.py        # + per-call cost/usage logging
+  agent/      # single-shot triage, the reason->act->observe loop, and the tools
+    triage.py  loop.py  tools.py
+  rag/        # build + query the Chroma knowledge base
+    knowledge_base.py
+  dedupe/     # collapse duplicate findings into clusters
+    dedupe.py
+  report/     # assemble + render the prioritized report
+    report.py
+dashboard/    # Streamlit UI
+  app.py
+eval/         # labeled answer key + precision/recall metrics
+  labels.jsonl  evaluate.py
+data/
+  nuclei_sample.jsonl        # sample scanner input
+  kb/knowledge_base.jsonl    # curated CVE/CWE corpus (the RAG source)
+tests/        # 17 offline unit tests (LLM + Chroma faked)
+Dockerfile   requirements.txt   pyproject.toml   .env.example
+```
+
+## Design decisions (how it's implemented)
+
+- **Provider-agnostic LLM client.** The app calls one `complete()` / `chat()`; the
+  provider and model live in `.env`, dispatched on `config.provider`. Swapping
+  Groq → Anthropic is a config change, and the model name is never hardcoded.
+- **Reliable structured output.** `complete_structured()` asks for JSON matching a
+  Pydantic schema, validates it, and **re-prompts with the error and retries** on
+  failure — turning flaky text into a trustworthy typed object.
+- **A clean tool seam.** A tool is just a Python function plus a JSON schema; the model
+  *requests* it, our code runs it. `lookup_cve` went from a hard-coded stub to real RAG
+  retrieval **without changing a line of the agent loop**.
+- **Normalize at the edge.** All scanner-specific quirks live in the parser; everything
+  downstream sees the same `Finding`. Adding Semgrep means adding a parser, not touching
+  triage or reporting.
+- **Dedupe before triage** so the LLM never judges the same issue twice.
+- **One observability chokepoint.** Every call funnels through `_make_result`, which
+  logs and accumulates `UsageStats` — so tokens/cost/latency are captured everywhere.
+- **Testable without the network.** The LLM and vector store are faked in tests (17
+  fast, offline tests); the live paths are exercised by the runnable demos.
+- **Safety as a constraint.** The triage prompt and tools only ever produce
+  *remediation* ("how to fix"), never exploit or attack content.
 
 ## Prerequisites
 
